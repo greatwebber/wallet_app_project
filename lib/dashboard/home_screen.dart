@@ -1,13 +1,61 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:wallet_app/services/api_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
+  @override
+  _HomeScreenState createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String userName = "Guest User";
+  String userEmail = "guest@example.com";
+  double walletBalance = 0.00;
+  List<dynamic> transactionHistory = [];
+
+  @override
+  void initState() {
+    super.initState();
+    loadUserData();
+  }
+
+  // Load user data from SharedPreferences or fetch from API
+  Future<void> loadUserData() async {
+    final userData = await ApiService.getUserDataFromStorage();
+    if (userData != null) {
+      setState(() {
+        userName = userData["name"];
+        userEmail = userData["email"];
+        walletBalance = (userData["balance"] ?? 0.00).toDouble();
+        transactionHistory = userData["transactions"] ?? [];
+      });
+    } else {
+      fetchUserData();
+    }
+  }
+
+  // Fetch user details from API and update SharedPreferences
+  Future<void> fetchUserData() async {
+    final userData = await ApiService.getUserDetails();
+    if (userData != null) {
+      setState(() {
+        userName = userData["name"];
+        userEmail = userData["email"];
+        walletBalance = (userData["balance"] ?? 0.00).toDouble();
+        transactionHistory = userData["transactions"] ?? [];
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text("Dashboard", style: TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(
+          "Welcome $userName",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.blueAccent,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -40,9 +88,11 @@ class HomeScreen extends StatelessWidget {
                     Text("Wallet Balance",
                         style: TextStyle(fontSize: 16, color: Colors.grey)),
                     SizedBox(height: 8),
-                    Text("₦12,540.00",
-                        style: TextStyle(
-                            fontSize: 28, fontWeight: FontWeight.bold)),
+                    Text(
+                      "₦${walletBalance.toStringAsFixed(2)}",
+                      style:
+                          TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
+                    ),
                     SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -94,10 +144,7 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-
             SizedBox(height: 20),
-
-            // Recent Transactions
             Container(
               padding: EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -115,11 +162,18 @@ class HomeScreen extends StatelessWidget {
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   SizedBox(height: 10),
-                  _buildTransactionItem("Starbucks Coffee", "₦5.40", "Today"),
-                  _buildTransactionItem(
-                      "Amazon Purchase", "₦120.00", "Yesterday"),
-                  _buildTransactionItem(
-                      "Netflix Subscription", "₦15.99", "3 days ago"),
+                  transactionHistory.isEmpty
+                      ? Center(
+                          child: Text("No transactions found",
+                              style: TextStyle(color: Colors.grey)))
+                      : Column(
+                          children: transactionHistory
+                              .map((transaction) => _buildTransactionItem(
+                                  transaction["title"],
+                                  "₦${transaction["amount"]}",
+                                  transaction["date"]))
+                              .toList(),
+                        ),
                 ],
               ),
             ),
