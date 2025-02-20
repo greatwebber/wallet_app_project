@@ -151,87 +151,168 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  void _showSendMoneyDialog(BuildContext context) async {
+  void _showSendMoneyBottomSheet(BuildContext context) {
     TextEditingController amountController = TextEditingController();
     TextEditingController recipientController = TextEditingController();
+    bool isLoading = false;
+    String? errorMessage; // Holds the error message
 
-    double? balance = await ApiService.getWalletBalance();
-    if (balance == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to fetch wallet balance!")),
-      );
-      return;
-    }
-
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text("Send Money"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Obx(() => Text(
-                  "Available Balance: ₦${homeController.walletBalance.value.toStringAsFixed(2)}")),
-              TextField(
-                controller: recipientController,
-                decoration:
-                    InputDecoration(labelText: "Recipient (Email or ID)"),
+      isScrollControlled: true,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
               ),
-              TextField(
-                controller: amountController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(labelText: "Amount"),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 50,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[400],
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Center(
+                    child: Text(
+                      "Send Money",
+                      style:
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  if (errorMessage != null) // Show error message if available
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, bottom: 8),
+                      child: Center(
+                        child: Text(
+                          errorMessage!,
+                          style: TextStyle(color: Colors.red, fontSize: 14),
+                        ),
+                      ),
+                    ),
+                  Obx(() => Text(
+                        "Available Balance: ₦${homeController.walletBalance.value.toStringAsFixed(2)}",
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w500),
+                      )),
+                  SizedBox(height: 10),
+                  TextField(
+                    controller: recipientController,
+                    decoration: InputDecoration(
+                      labelText: "Recipient (Email or ID)",
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: "Amount",
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.money),
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: Text("Cancel", style: TextStyle(fontSize: 16)),
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                              horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        onPressed: isLoading
+                            ? null // Disable button while loading
+                            : () async {
+                                double amount =
+                                    double.tryParse(amountController.text) ?? 0;
+                                String recipient =
+                                    recipientController.text.trim();
+
+                                if (amount <= 0 || recipient.isEmpty) {
+                                  setState(() {
+                                    errorMessage =
+                                        "Enter a valid amount and recipient.";
+                                  });
+                                  return;
+                                }
+
+                                if (amount >
+                                    homeController.walletBalance.value) {
+                                  setState(() {
+                                    errorMessage = "Insufficient balance!";
+                                  });
+                                  return;
+                                }
+
+                                setState(() {
+                                  isLoading = true;
+                                  errorMessage =
+                                      null; // Clear any previous errors
+                                });
+
+                                var result = await ApiService.sendMoney(
+                                    amount, recipient);
+
+                                if (result["success"]) {
+                                  homeController.walletBalance.value =
+                                      result["balance"];
+                                  homeController.transactionHistory
+                                      .insert(0, result["transaction"]);
+
+                                  if (context.mounted) {
+                                    Navigator.pop(context); // Close modal
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            "Money sent successfully! New Balance: ₦${result["balance"].toStringAsFixed(2)}"),
+                                      ),
+                                    );
+                                  }
+                                } else {
+                                  setState(() {
+                                    errorMessage = result["message"];
+                                  });
+                                }
+
+                                setState(() {
+                                  isLoading = false;
+                                });
+                              },
+                        child: isLoading
+                            ? CircularProgressIndicator(color: Colors.white)
+                            : Text("Send", style: TextStyle(fontSize: 16)),
+                      ),
+                    ],
+                  ),
+                ],
               ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                double amount = double.tryParse(amountController.text) ?? 0;
-                String recipient = recipientController.text.trim();
-
-                if (amount <= 0 || recipient.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text("Enter a valid amount and recipient")),
-                  );
-                  return;
-                }
-
-                if (amount > homeController.walletBalance.value) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Insufficient balance!")),
-                  );
-                  return;
-                }
-
-                Navigator.pop(context);
-
-                double? updatedBalance =
-                    await ApiService.sendMoney(amount, recipient);
-                if (updatedBalance != null) {
-                  homeController.walletBalance.value =
-                      updatedBalance; // ✅ Update GetX state
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                        content: Text(
-                            "Money sent successfully! New Balance: ₦${updatedBalance.toStringAsFixed(2)}")),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Failed to send money!")),
-                  );
-                }
-              },
-              child: Text("Send"),
-            ),
-          ],
+            );
+          },
         );
       },
     );
@@ -296,9 +377,7 @@ class HomeScreen extends StatelessWidget {
                           "Send Money",
                           Icons.send,
                           Colors.green,
-                          () {
-                            _showSendMoneyDialog(context);
-                          },
+                          () => _showSendMoneyBottomSheet(context),
                         ),
                       ],
                     ),
@@ -357,30 +436,56 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text("Recent Transactions",
-                      style:
-                          TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    "Recent Transactions",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                   SizedBox(height: 10),
                   Obx(() {
                     return homeController.transactionHistory.isEmpty
                         ? Center(
-                            child: Text("No transactions found",
-                                style: TextStyle(color: Colors.grey)))
+                            child: Text(
+                              "No transactions found",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
                         : Column(
                             children: homeController.transactionHistory
-                                .map((transaction) => ListTile(
-                                      title: Text(transaction["title"],
-                                          style: TextStyle(fontSize: 16)),
-                                      subtitle: Text(transaction["date"]),
-                                      trailing: Text(
-                                        "₦${transaction["amount"]}",
-                                        style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                            color: Colors.red),
-                                      ),
-                                    ))
-                                .toList(),
+                                .map((transaction) {
+                              bool isCredit = transaction["type"] == "credit";
+                              String recipient =
+                                  transaction["recipient"] ?? "N/A";
+
+                              // Generate description dynamically
+                              String description = isCredit
+                                  ? "Received from $recipient"
+                                  : "Sent to $recipient";
+
+                              return ListTile(
+                                leading: Icon(
+                                  isCredit
+                                      ? Icons.arrow_downward
+                                      : Icons.arrow_upward,
+                                  color: isCredit ? Colors.green : Colors.red,
+                                ),
+                                title: Text(
+                                  description, // Dynamic description
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                                subtitle: Text(
+                                  transaction["created_at"],
+                                  style: TextStyle(color: Colors.grey),
+                                ),
+                                trailing: Text(
+                                  "₦${transaction["amount"]}",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                    color: isCredit ? Colors.green : Colors.red,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
                           );
                   }),
                 ],

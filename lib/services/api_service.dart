@@ -146,9 +146,11 @@ class ApiService {
     }
   }
 
-  static Future<double?> sendMoney(double amount, String recipient) async {
+  static Future<Map<String, dynamic>> sendMoney(
+      double amount, String recipient) async {
     String? token = await getToken();
-    if (token == null) return null;
+    if (token == null)
+      return {"success": false, "message": "Authentication failed"};
 
     final response = await http.post(
       Uri.parse("$baseUrl/wallet/send-money"),
@@ -156,14 +158,33 @@ class ApiService {
         "Authorization": "Bearer $token",
         "Content-Type": "application/json",
       },
-      body: jsonEncode({"amount": amount, "recipient": recipient}),
+      body: jsonEncode({
+        "amount": amount,
+        "recipient": recipient,
+      }),
     );
 
     if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      return data["balance"]?.toDouble(); // Return updated balance
+      try {
+        final data = jsonDecode(response.body);
+        return {
+          "success": true,
+          "balance": data["balance"].toDouble(),
+          "transaction": data["transaction"],
+        };
+      } catch (e) {
+        return {"success": false, "message": "Invalid server response"};
+      }
     } else {
-      return null;
+      try {
+        final errorData = jsonDecode(response.body);
+        return {
+          "success": false,
+          "message": errorData["message"] ?? "Transaction failed"
+        };
+      } catch (e) {
+        return {"success": false, "message": "Unexpected error occurred"};
+      }
     }
   }
 }
