@@ -39,6 +39,8 @@ class HomeScreen extends StatelessWidget {
           homeController.walletBalance.value = updatedBalance; // ✅ Update UI
         }
 
+        homeController.isLoading.value = false;
+
         if (context.mounted) {
           Navigator.pop(
               context); // ✅ Only close modal if widget is still mounted
