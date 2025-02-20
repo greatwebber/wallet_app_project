@@ -1,64 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:wallet_app/services/api_service.dart';
 import 'package:pay_with_paystack/pay_with_paystack.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 
-class HomeScreen extends StatefulWidget {
-  @override
-  _HomeScreenState createState() => _HomeScreenState();
-}
+import 'package:wallet_app/services/home_controller.dart';
 
-class _HomeScreenState extends State<HomeScreen> {
-  String userName = "Guest User";
-  String userEmail = "guest@example.com";
-  double walletBalance = 0.00;
-  List<dynamic> transactionHistory = [];
-
-  @override
-  void initState() {
-    super.initState();
-    loadUserData();
-    _fetchWalletBalance();
-  }
-
-  // Load user data from SharedPreferences or fetch from API
-  Future<void> loadUserData() async {
-    final userData = await ApiService.getUserDataFromStorage();
-    if (userData != null) {
-      setState(() {
-        userName = userData["name"];
-        userEmail = userData["email"];
-        walletBalance = (userData["balance"] ?? 0.00).toDouble();
-        transactionHistory = userData["transactions"] ?? [];
-      });
-    } else {
-      fetchUserData();
-    }
-  }
-
-  void _fetchWalletBalance() async {
-    double? balance = await ApiService.getWalletBalance();
-    if (balance != null) {
-      setState(() {
-        walletBalance = balance;
-      });
-    }
-  }
-
-  // Fetch user details from API and update SharedPreferences
-  Future<void> fetchUserData() async {
-    final userData = await ApiService.getUserDetails();
-    if (userData != null) {
-      setState(() {
-        userName = userData["name"];
-        userEmail = userData["email"];
-        walletBalance = (userData["balance"] ?? 0.00).toDouble();
-        transactionHistory = userData["transactions"] ?? [];
-      });
-    }
-  }
+class HomeScreen extends StatelessWidget {
+  final HomeController homeController = Get.put(HomeController());
 
   void _showAddMoneyModal(BuildContext context) {
     TextEditingController amountController = TextEditingController();
@@ -82,8 +33,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final response = await ApiService.submitAddMoney(amount);
       if (response) {
+        // ✅ Fetch updated balance from API after successful money addition
+        double? updatedBalance = await ApiService.getWalletBalance();
+        if (updatedBalance != null) {
+          homeController.walletBalance.value = updatedBalance; // ✅ Update UI
+        }
+
         Navigator.pop(context); // Close modal after successful submission
-        _showSnackBar("Money added successfully!");
+        _showSnackBar(
+            "Money added successfully! New Balance: ₦${updatedBalance?.toStringAsFixed(2)}");
       } else {
         _showSnackBar("Failed to add money.", isError: true);
       }
@@ -91,19 +49,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
     Future<void> _processPaystackPayment(double amount) async {
       final uniqueTransRef = PayWithPayStack().generateUuidV4();
+      final String userEmail = homeController.userEmail.value;
+
+      print(amount);
 
       PayWithPayStack().now(
         context: context,
-        secretKey:
-            "sk_test_0fb9aaa0ace494abaea6e3fc180084d74082cb2e", // Replace with your actual secret key
-        customerEmail: userEmail, // Use the user's email
+        secretKey: "sk_test_0fb9aaa0ace494abaea6e3fc180084d74082cb2e",
+        customerEmail: userEmail,
         reference: uniqueTransRef,
         currency: "NGN",
-        amount: (amount * 100)
-            .toDouble(), // Convert to kobo (Paystack requires amounts in kobo)
+        amount: (amount).toDouble(), // ✅ Convert to Kobo
         transactionCompleted: (paymentData) {
           _showSnackBar("Transaction Successful!");
-          _submitToBackend(amount); // Send transaction to backend
+          _submitToBackend(amount); // ✅ After success, update wallet
         },
         transactionNotCompleted: (reason) {
           _showSnackBar("Transaction Failed: $reason", isError: true);
@@ -212,7 +171,8 @@ class _HomeScreenState extends State<HomeScreen> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("Available Balance: ₦${balance.toStringAsFixed(2)}"),
+              Obx(() => Text(
+                  "Available Balance: ₦${homeController.walletBalance.value.toStringAsFixed(2)}")),
               TextField(
                 controller: recipientController,
                 decoration:
@@ -243,7 +203,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return;
                 }
 
-                if (amount > balance) {
+                if (amount > homeController.walletBalance.value) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(content: Text("Insufficient balance!")),
                   );
@@ -255,9 +215,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 double? updatedBalance =
                     await ApiService.sendMoney(amount, recipient);
                 if (updatedBalance != null) {
-                  setState(() {
-                    walletBalance = updatedBalance; // Update balance in UI
-                  });
+                  homeController.walletBalance.value =
+                      updatedBalance; // ✅ Update GetX state
 
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
@@ -283,10 +242,10 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[100],
       appBar: AppBar(
-        title: Text(
-          "Welcome $userName",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Obx(() => Text(
+              "Welcome ${homeController.userName.value}",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            )),
         backgroundColor: Colors.blueAccent,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -319,11 +278,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text("Wallet Balance",
                         style: TextStyle(fontSize: 16, color: Colors.grey)),
                     SizedBox(height: 8),
-                    Text(
-                      "₦${walletBalance.toStringAsFixed(2)}",
-                      style:
-                          TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                    ),
+                    Obx(() => Text(
+                          "₦${homeController.walletBalance.value.toStringAsFixed(2)}",
+                          style: TextStyle(
+                              fontSize: 28, fontWeight: FontWeight.bold),
+                        )),
                     SizedBox(height: 16),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -402,18 +361,28 @@ class _HomeScreenState extends State<HomeScreen> {
                       style:
                           TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                   SizedBox(height: 10),
-                  transactionHistory.isEmpty
-                      ? Center(
-                          child: Text("No transactions found",
-                              style: TextStyle(color: Colors.grey)))
-                      : Column(
-                          children: transactionHistory
-                              .map((transaction) => _buildTransactionItem(
-                                  transaction["title"],
-                                  "₦${transaction["amount"]}",
-                                  transaction["date"]))
-                              .toList(),
-                        ),
+                  Obx(() {
+                    return homeController.transactionHistory.isEmpty
+                        ? Center(
+                            child: Text("No transactions found",
+                                style: TextStyle(color: Colors.grey)))
+                        : Column(
+                            children: homeController.transactionHistory
+                                .map((transaction) => ListTile(
+                                      title: Text(transaction["title"],
+                                          style: TextStyle(fontSize: 16)),
+                                      subtitle: Text(transaction["date"]),
+                                      trailing: Text(
+                                        "₦${transaction["amount"]}",
+                                        style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.red),
+                                      ),
+                                    ))
+                                .toList(),
+                          );
+                  }),
                 ],
               ),
             ),

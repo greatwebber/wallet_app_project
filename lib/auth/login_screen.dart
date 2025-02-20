@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wallet_app/auth/forgot_password_screen.dart';
 import 'package:wallet_app/dashboard/dashboard_screen.dart';
 import 'package:wallet_app/auth/signup_screen.dart';
 import 'package:wallet_app/services/api_service.dart';
+import 'package:wallet_app/services/home_controller.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -36,13 +38,29 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     if (success) {
+      // ✅ Get the HomeController instance
+      final HomeController homeController = Get.find<HomeController>();
+
+      // ✅ Fetch latest user data from API
       var userData = await ApiService.getUserDetails();
       if (userData != null) {
         SharedPreferences prefs = await SharedPreferences.getInstance();
 
+        // ✅ Update HomeController values
+        homeController.userName.value = userData["name"];
+        homeController.userEmail.value = userData["email"];
+        homeController.walletBalance.value =
+            double.tryParse(userData["balance"].toString()) ?? 0.00;
+        homeController.transactionHistory
+            .assignAll(userData["transactions"] ?? []);
+
+        // ✅ Save latest data in SharedPreferences
         await prefs.setString("username", userData["name"]);
-        await prefs.setInt("walletBalance", userData["balance"]);
+        await prefs.setDouble("walletBalance",
+            double.tryParse(userData["balance"].toString()) ?? 0.00);
       }
+
+      // ✅ Navigate to Dashboard after updating UI
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (context) => DashboardScreen()),

@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wallet_app/services/home_controller.dart';
 
 class ApiService {
   static const String baseUrl = "https://restapi.accttradecenter.com/api";
@@ -45,6 +47,7 @@ class ApiService {
 
   // Logout User
   static Future<void> logout() async {
+    final HomeController homeController = Get.find<HomeController>();
     String? token = await getToken();
     await http.post(
       Uri.parse("$baseUrl/logout"),
@@ -52,6 +55,10 @@ class ApiService {
     );
     SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove("token");
+    homeController.userName.value = "";
+    homeController.userEmail.value = "";
+    homeController.walletBalance.value = 0.00;
+    homeController.transactionHistory.clear();
   }
 
   // Fetch User Details
@@ -74,15 +81,6 @@ class ApiService {
 
   // Fetch User Details (Check Local Storage First)
   static Future<Map<String, dynamic>?> getUserDetails() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    // Try to get cached user data first
-    String? cachedData = prefs.getString("user_data");
-    if (cachedData != null) {
-      return jsonDecode(cachedData);
-    }
-
-    // If no cached data, fetch from API
     String? token = await getToken();
     if (token == null) return null;
 
@@ -93,7 +91,11 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final userData = jsonDecode(response.body);
-      await saveUserData(userData); // Save to local storage
+
+      // Update local storage with fresh data
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.setString("user_data", jsonEncode(userData));
+
       return userData;
     }
     return null;
@@ -110,7 +112,13 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      return data["balance"]?.toDouble();
+
+      // Ensure the balance is parsed correctly
+      if (data["balance"] is num) {
+        return (data["balance"] as num).toDouble();
+      } else if (data["balance"] is String) {
+        return double.tryParse(data["balance"]);
+      }
     }
     return null;
   }
