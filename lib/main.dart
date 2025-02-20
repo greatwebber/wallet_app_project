@@ -4,6 +4,7 @@ import 'package:wallet_app/services/user_provider.dart';
 import 'splash_screen.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(
     MultiProvider(
       providers: [

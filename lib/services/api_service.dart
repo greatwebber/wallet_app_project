@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
-  static const String baseUrl = "http://10.0.2.2:8000/api";
+  static const String baseUrl = "https://restapi.accttradecenter.com/api";
 
   // Save Token Locally
   static Future<void> saveToken(String token) async {
@@ -97,5 +97,65 @@ class ApiService {
       return userData;
     }
     return null;
+  }
+
+  static Future<double?> getWalletBalance() async {
+    String? token = await getToken();
+    if (token == null) return null;
+
+    final response = await http.get(
+      Uri.parse("$baseUrl/wallet"),
+      headers: {"Authorization": "Bearer $token"},
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data["balance"]?.toDouble();
+    }
+    return null;
+  }
+
+  static Future<bool> submitAddMoney(double amount) async {
+    String? token = await getToken();
+    if (token == null) return false; // No auth token found
+
+    final response = await http.post(
+      Uri.parse("$baseUrl/wallet/add-money"),
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({"amount": amount}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      print("Money added successfully! New Balance: ₦${data['balance']}");
+      return true;
+    } else {
+      print("Failed to add money: ${response.body}");
+      return false;
+    }
+  }
+
+  static Future<double?> sendMoney(double amount, String recipient) async {
+    String? token = await getToken();
+    if (token == null) return null;
+
+    final response = await http.post(
+      Uri.parse("$baseUrl/wallet/send-money"),
+      headers: {
+        "Authorization": "Bearer $token",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({"amount": amount, "recipient": recipient}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return data["balance"]?.toDouble(); // Return updated balance
+    } else {
+      return null;
+    }
   }
 }
