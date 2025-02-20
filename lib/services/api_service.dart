@@ -146,6 +146,29 @@ class ApiService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getTransactions() async {
+    String? token = await getToken();
+    if (token == null) return [];
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/user'),
+        headers: {
+          'Authorization': "Bearer $token",
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data["transactions"]);
+      } else {
+        return [];
+      }
+    } catch (e) {
+      return [];
+    }
+  }
+
   static Future<Map<String, dynamic>> sendMoney(
       double amount, String recipient) async {
     String? token = await getToken();

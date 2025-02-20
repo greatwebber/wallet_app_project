@@ -6,12 +6,14 @@ class HomeController extends GetxController {
   var userEmail = "guest@example.com".obs;
   var walletBalance = 0.00.obs;
   var transactionHistory = <dynamic>[].obs;
+  var isLoading = false.obs;
 
   @override
   void onInit() {
     super.onInit();
     loadUserData();
     fetchWalletBalance();
+    fetchTransactions();
   }
 
   Future<void> loadUserData() async {
@@ -38,6 +40,16 @@ class HomeController extends GetxController {
     }
   }
 
+  void fetchTransactions() async {
+    isLoading(true);
+    try {
+      var transactions = await ApiService.getTransactions();
+      transactionHistory.assignAll(transactions);
+    } finally {
+      isLoading(false);
+    }
+  }
+
   Future<void> fetchUserData() async {
     final userData = await ApiService.getUserDetails();
     if (userData != null) {
@@ -46,6 +58,7 @@ class HomeController extends GetxController {
 
       walletBalance.value =
           double.tryParse(userData["balance"].toString()) ?? 0.00;
+
       transactionHistory.assignAll(userData["transactions"] ?? []);
     }
   }

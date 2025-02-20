@@ -1,41 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:get/get.dart';
+import 'package:wallet_app/services/home_controller.dart';
 
 class TransactionsScreen extends StatelessWidget {
-  final List<Map<String, dynamic>> transactions = [
-    {
-      "title": "Jumia Purchase",
-      "amount": "-₦120,000.00",
-      "color": Colors.red,
-      "icon": FontAwesomeIcons.shoppingBag,
-      "date": "Feb 5, 2025",
-      "type": "Online Shopping"
-    },
-    {
-      "title": "Salary Credit",
-      "amount": "+₦3,000,000.00",
-      "color": Colors.green,
-      "icon": FontAwesomeIcons.moneyBillWave,
-      "date": "Feb 1, 2025",
-      "type": "Income"
-    },
-    {
-      "title": "Market Shopping",
-      "amount": "-₦45,750.00",
-      "color": Colors.red,
-      "icon": FontAwesomeIcons.shoppingCart,
-      "date": "Feb 3, 2025",
-      "type": "Supermarket"
-    },
-    {
-      "title": "DSTV Subscription",
-      "amount": "-₦15,990.00",
-      "color": Colors.red,
-      "icon": FontAwesomeIcons.tv,
-      "date": "Feb 2, 2025",
-      "type": "Entertainment"
-    },
-  ];
+  final HomeController homeController =
+      Get.find<HomeController>(); // Get the controller
 
   @override
   Widget build(BuildContext context) {
@@ -56,19 +26,39 @@ class TransactionsScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             SizedBox(height: 10),
             Expanded(
-              child: ListView.builder(
-                itemCount: transactions.length,
-                itemBuilder: (context, index) {
-                  return _buildTransactionItem(
-                    transactions[index]["title"],
-                    transactions[index]["amount"],
-                    transactions[index]["color"],
-                    transactions[index]["icon"],
-                    transactions[index]["date"],
-                    transactions[index]["type"],
+              child: Obx(() {
+                if (homeController.isLoading.value) {
+                  return Center(child: CircularProgressIndicator());
+                }
+
+                if (homeController.transactionHistory.isEmpty) {
+                  return Center(
+                    child: Text("No transactions found",
+                        style: TextStyle(color: Colors.grey)),
                   );
-                },
-              ),
+                }
+
+                return ListView.builder(
+                  itemCount: homeController.transactionHistory.length,
+                  itemBuilder: (context, index) {
+                    var transaction = homeController.transactionHistory[index];
+                    bool isCredit = transaction["type"] == "credit";
+                    return _buildTransactionItem(
+                      isCredit
+                          ? "Received from ${transaction['recipient']}"
+                          : "Sent to ${transaction['recipient']}",
+                      (isCredit ? "+₦" : "-₦") +
+                          transaction["amount"].toString(),
+                      isCredit ? Colors.green : Colors.red,
+                      isCredit
+                          ? FontAwesomeIcons.moneyBillWave
+                          : FontAwesomeIcons.arrowUp,
+                      transaction["created_at"],
+                      isCredit ? "Income" : "Transfer",
+                    );
+                  },
+                );
+              }),
             ),
           ],
         ),
