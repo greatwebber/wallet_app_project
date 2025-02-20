@@ -138,7 +138,14 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      print("Money added successfully! New Balance: ₦${data['balance']}");
+
+      // ✅ Update wallet balance in HomeController
+      Get.find<HomeController>().walletBalance.value =
+          data["balance"].toDouble();
+
+      // ✅ Refresh transaction history
+      Get.find<HomeController>().fetchUserData();
+
       return true;
     } else {
       print("Failed to add money: ${response.body}");

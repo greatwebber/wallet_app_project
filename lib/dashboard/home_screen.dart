@@ -15,11 +15,11 @@ class HomeScreen extends StatelessWidget {
     TextEditingController amountController = TextEditingController();
 
     void _showSnackBar(String message, {bool isError = false}) {
+      if (!context.mounted) return; // ✅ Prevent crash if widget is disposed
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
           backgroundColor: isError ? Colors.red : Colors.green,
-          duration: Duration(seconds: 2),
         ),
       );
     }
@@ -39,7 +39,11 @@ class HomeScreen extends StatelessWidget {
           homeController.walletBalance.value = updatedBalance; // ✅ Update UI
         }
 
-        Navigator.pop(context); // Close modal after successful submission
+        if (context.mounted) {
+          Navigator.pop(
+              context); // ✅ Only close modal if widget is still mounted
+        }
+
         _showSnackBar(
             "Money added successfully! New Balance: ₦${updatedBalance?.toStringAsFixed(2)}");
       } else {
@@ -51,8 +55,6 @@ class HomeScreen extends StatelessWidget {
       final uniqueTransRef = PayWithPayStack().generateUuidV4();
       final String userEmail = homeController.userEmail.value;
 
-      print(amount);
-
       PayWithPayStack().now(
         context: context,
         secretKey: "sk_test_0fb9aaa0ace494abaea6e3fc180084d74082cb2e",
@@ -63,11 +65,12 @@ class HomeScreen extends StatelessWidget {
         transactionCompleted: (paymentData) {
           _showSnackBar("Transaction Successful!");
           _submitToBackend(amount); // ✅ After success, update wallet
+          homeController.isLoading.value = true;
         },
         transactionNotCompleted: (reason) {
           _showSnackBar("Transaction Failed: $reason", isError: true);
         },
-        callbackUrl: '',
+        callbackUrl: 'https://standard.paystack.co/close',
       );
     }
 
@@ -122,27 +125,41 @@ class HomeScreen extends StatelessWidget {
               // Paystack Payment Button
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    double? amount = double.tryParse(amountController.text);
-                    if (amount != null && amount > 0) {
-                      _processPaystackPayment(amount);
-                    } else {
-                      _showSnackBar("Enter a valid amount", isError: true);
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
-                    padding: EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: const Text(
-                    "Proceed to Pay",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
+                child: Obx(() => ElevatedButton(
+                      onPressed: homeController.isLoading.value
+                          ? null // ✅ Disable button while loading
+                          : () {
+                              double? amount =
+                                  double.tryParse(amountController.text);
+                              if (amount != null && amount > 0) {
+                                _processPaystackPayment(
+                                    amount); // ✅ Start Paystack process
+                              } else {
+                                _showSnackBar("Enter a valid amount",
+                                    isError: true);
+                              }
+                            },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blueAccent,
+                        padding: EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: homeController.isLoading.value
+                          ? SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            ) // ✅ Show loading indicator
+                          : const Text(
+                              "Proceed to Pay",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                    )),
               ),
             ],
           ),
@@ -279,11 +296,6 @@ class HomeScreen extends StatelessWidget {
                                     amount, recipient);
 
                                 if (result["success"]) {
-                                  homeController.walletBalance.value =
-                                      result["balance"];
-                                  homeController.transactionHistory
-                                      .insert(0, result["transaction"]);
-
                                   if (context.mounted) {
                                     Navigator.pop(context); // Close modal
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -451,6 +463,7 @@ class HomeScreen extends StatelessWidget {
                           )
                         : Column(
                             children: homeController.transactionHistory
+                                .take(5)
                                 .map((transaction) {
                               bool isCredit = transaction["type"] == "credit";
                               String recipient =
