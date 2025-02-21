@@ -6,6 +6,7 @@ class HomeController extends GetxController {
   var userEmail = "guest@example.com".obs;
   var walletBalance = 0.00.obs;
   var transactionHistory = <dynamic>[].obs;
+  var profileImage = ''.obs;
   var isLoading = false.obs;
 
   @override
