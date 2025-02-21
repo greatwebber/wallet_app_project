@@ -7,6 +7,27 @@ import 'package:wallet_app/services/home_controller.dart';
 class ProfileScreen extends StatelessWidget {
   final HomeController homeController = Get.find<HomeController>();
 
+  Future<bool> _showLogoutConfirmationDialog(BuildContext context) async {
+    return await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text("Logout"),
+            content: Text("Are you sure you want to log out?"),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text("Cancel"),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text("Logout", style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -132,7 +153,13 @@ class ProfileScreen extends StatelessWidget {
                   Icon(FontAwesomeIcons.rightFromBracket, color: Colors.red),
               title: Text("Logout"),
               trailing: Icon(Icons.arrow_forward_ios, size: 16),
-              onTap: () => ApiService.logout(),
+              onTap: () async {
+                bool confirmLogout =
+                    await _showLogoutConfirmationDialog(context);
+                if (confirmLogout) {
+                  await ApiService.logout(context); // Call the logout function
+                }
+              },
             ),
           ],
         ),

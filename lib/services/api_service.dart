@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wallet_app/auth/login_screen.dart';
 import 'package:wallet_app/services/home_controller.dart';
 
 class ApiService {
@@ -46,19 +48,37 @@ class ApiService {
   }
 
   // Logout User
-  static Future<void> logout() async {
-    final HomeController homeController = Get.find<HomeController>();
-    String? token = await getToken();
-    await http.post(
-      Uri.parse("$baseUrl/logout"),
-      headers: {"Authorization": "Bearer $token"},
-    );
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove("token");
-    homeController.userName.value = "";
-    homeController.userEmail.value = "";
-    homeController.walletBalance.value = 0.00;
-    homeController.transactionHistory.clear();
+  static Future<void> logout(BuildContext context) async {
+    try {
+      final HomeController homeController = Get.find<HomeController>();
+      SharedPreferences prefs = await SharedPreferences.getInstance();
+      String? token = prefs.getString("token");
+
+      if (token != null) {
+        await http.post(
+          Uri.parse("$baseUrl/logout"),
+          headers: {"Authorization": "Bearer $token"},
+        );
+      }
+
+      // Clear local storage
+      await prefs.remove("token");
+
+      // Clear HomeController data
+      homeController.userName.value = "";
+      homeController.userEmail.value = "";
+      homeController.walletBalance.value = 0.00;
+      homeController.transactionHistory.clear();
+
+      // Redirect to Login Screen
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => LoginScreen()),
+        (route) => false, // Removes all previous routes
+      ); // This removes all previous screens and redirects
+    } catch (e) {
+      print("Logout Error: $e");
+    }
   }
 
   // Fetch User Details

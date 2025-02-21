@@ -9,6 +9,8 @@ import 'package:wallet_app/services/api_service.dart';
 import 'package:wallet_app/services/home_controller.dart';
 
 class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
   @override
   _LoginScreenState createState() => _LoginScreenState();
 }
