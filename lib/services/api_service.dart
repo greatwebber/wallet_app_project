@@ -197,6 +197,7 @@ class ApiService {
     if (response.statusCode == 200) {
       try {
         final data = jsonDecode(response.body);
+        Get.find<HomeController>().fetchUserData();
         return {
           "success": true,
           "balance": data["balance"].toDouble(),

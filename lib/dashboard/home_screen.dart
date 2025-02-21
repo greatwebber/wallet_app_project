@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:wallet_app/dashboard/bill_screen.dart';
+import 'package:wallet_app/dashboard/pay_screen.dart';
+import 'package:wallet_app/dashboard/receive_screen.dart';
 import 'package:wallet_app/services/api_service.dart';
 import 'package:pay_with_paystack/pay_with_paystack.dart';
 import 'package:http/http.dart' as http;
@@ -424,13 +427,29 @@ class HomeScreen extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       _buildQuickAction(
-                          "Pay", FontAwesomeIcons.creditCard, Colors.purple),
+                          context,
+                          "Pay",
+                          FontAwesomeIcons.creditCard,
+                          Colors.purple,
+                          PayScreen()),
                       _buildQuickAction(
-                          "Receive", FontAwesomeIcons.qrcode, Colors.orange),
-                      _buildQuickAction("Bills",
-                          FontAwesomeIcons.fileInvoiceDollar, Colors.teal),
+                          context,
+                          "Receive",
+                          FontAwesomeIcons.qrcode,
+                          Colors.orange,
+                          ReceiveScreen()),
                       _buildQuickAction(
-                          "More", FontAwesomeIcons.ellipsisH, Colors.grey),
+                          context,
+                          "Bills",
+                          FontAwesomeIcons.fileInvoiceDollar,
+                          Colors.teal,
+                          BillsScreen()),
+                      // _buildQuickAction(
+                      //     context,
+                      //     "More",
+                      //     FontAwesomeIcons.ellipsisH,
+                      //     Colors.grey,
+                      //     MoreOptionsScreen()),
                     ],
                   ),
                 ],
@@ -526,18 +545,27 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildQuickAction(String label, IconData icon, Color color) {
-    return Column(
-      children: [
-        CircleAvatar(
-          radius: 30,
-          backgroundColor: color.withOpacity(0.15),
-          child: Icon(icon, size: 28, color: color),
-        ),
-        SizedBox(height: 8),
-        Text(label,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-      ],
+  Widget _buildQuickAction(BuildContext context, String label, IconData icon,
+      Color color, Widget targetScreen) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => targetScreen),
+        );
+      },
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundColor: color.withOpacity(0.15),
+            child: Icon(icon, size: 28, color: color),
+          ),
+          SizedBox(height: 8),
+          Text(label,
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        ],
+      ),
     );
   }
 
