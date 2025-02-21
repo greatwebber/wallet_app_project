@@ -6,6 +6,8 @@ import 'package:wallet_app/services/home_controller.dart';
 class PayScreen extends StatelessWidget {
   final HomeController homeController = Get.find<HomeController>();
 
+  PayScreen({super.key});
+
   void _showSendMoneyBottomSheet(BuildContext context,
       {required String prefillRecipient}) {
     TextEditingController amountController = TextEditingController();
