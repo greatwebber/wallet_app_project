@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';
-import 'package:wallet_app/dashboard/home_screen.dart';
+import 'package:wallet_app/dashboard/dashboard_screen.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -368,8 +368,8 @@ Transaction ID: ${transactionData['id']?.toString() ?? 'N/A'}
                         ),
                       ),
                       onPressed: () {
-                        // Navigate to HomeScreen
-                        Get.offAll(() => HomeScreen());
+                        // Navigate to DashboardScreen
+                        Get.offAll(() => DashboardScreen());
                       },
                       child: Text(
                         "Back to Home",
