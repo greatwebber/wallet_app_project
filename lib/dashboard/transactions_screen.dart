@@ -19,7 +19,7 @@ class TransactionsScreen extends StatelessWidget {
         actions: [
           IconButton(
             icon: Icon(Icons.refresh),
-            onPressed: () => homeController.fetchTransactions(),
+            onPressed: () => homeController.refreshData(),
           ),
         ],
       ),

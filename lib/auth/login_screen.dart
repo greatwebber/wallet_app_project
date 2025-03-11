@@ -18,6 +18,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _isLoading = false;
+  String? _errorMessage;
   final _formKey = GlobalKey<FormState>(); // ✅ Form key for validation
 
   final TextEditingController emailController = TextEditingController();
@@ -28,66 +29,41 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      bool success = await ApiService.login(
+      final result = await ApiService.login(
         emailController.text.trim(),
         passwordController.text,
       );
 
-      if (!success) {
+      if (!mounted) return;
+
+      if (result["success"]) {
+        // Get the HomeController instance
+        final HomeController homeController = Get.find<HomeController>();
+        
+        // Initialize user data
+        await homeController.loadUserData();
+        
+        // Navigate to Dashboard
+        Get.offAll(() => DashboardScreen());
+      } else {
         setState(() {
-          _isLoading = false;
+          _errorMessage = result["message"];
         });
-        _showError("Invalid email or password. Please try again.");
-        return;
-      }
-
-      // Get the HomeController instance
-      final HomeController homeController = Get.find<HomeController>();
-
-      // Fetch user data and update UI in parallel
-      await Future.wait([
-        // Fetch and update user data
-        ApiService.getUserDetails().then((userData) {
-          if (userData != null) {
-            homeController.userName.value = userData["name"];
-            homeController.userEmail.value = userData["email"];
-            homeController.walletBalance.value =
-                double.tryParse(userData["balance"].toString()) ?? 0.00;
-            homeController.transactionHistory
-                .assignAll(userData["transactions"] ?? []);
-          }
-        }),
-
-        // Save data to SharedPreferences in parallel
-        ApiService.getUserDetails().then((userData) async {
-          if (userData != null) {
-            SharedPreferences prefs = await SharedPreferences.getInstance();
-            await prefs.setString("username", userData["name"]);
-            await prefs.setDouble("walletBalance",
-                double.tryParse(userData["balance"].toString()) ?? 0.00);
-            await ApiService.saveUserData(userData); // Save complete user data
-          }
-        }),
-      ]);
-
-      // Navigate to Dashboard
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DashboardScreen(),
-          ),
-        );
       }
     } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _errorMessage = "An unexpected error occurred. Please try again.";
+      });
+    } finally {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
-        _showError("An error occurred. Please try again.");
       }
     }
   }
@@ -189,6 +165,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 SizedBox(height: 20),
+
+                // Error message
+                if (_errorMessage != null)
+                  Padding(
+                    padding: EdgeInsets.only(bottom: 20),
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
 
                 SizedBox(
                   width: double.infinity,

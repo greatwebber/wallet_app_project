@@ -6,93 +6,118 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wallet_app/auth/login_screen.dart';
 import 'package:wallet_app/services/home_controller.dart';
 
+class ApiException implements Exception {
+  final String message;
+  final int? statusCode;
+  
+  ApiException(this.message, {this.statusCode});
+  
+  @override
+  String toString() => 'ApiException: $message${statusCode != null ? ' (Status: $statusCode)' : ''}';
+}
+
 class ApiService {
   static const String baseUrl = "https://restapi.accttradecenter.com/api";
+  static const Duration timeoutDuration = Duration(seconds: 10);
 
   // Save Token Locally
   static Future<void> saveToken(String token) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     await prefs.setString("token", token);
   }
 
   // Get Token
   static Future<String?> getToken() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     return prefs.getString("token");
   }
 
   // Register User
   static Future<bool> register(
       String name, String email, String password) async {
-    final response = await http.post(
-      Uri.parse("$baseUrl/register"),
-      body: {"name": name, "email": email, "password": password},
-    );
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/register"),
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          "name": name,
+          "email": email,
+          "password": password
+        }),
+      ).timeout(timeoutDuration);
 
-    return response.statusCode == 201;
+      await _handleResponse(response);
+      return true;
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Registration failed: ${e.toString()}');
+    }
   }
 
   // Login User
-  static Future<bool> login(String email, String password) async {
-    final response = await http.post(
-      Uri.parse("$baseUrl/login"),
-      body: {"email": email, "password": password},
-    );
+  static Future<Map<String, dynamic>> login(String email, String password) async {
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/login"),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+        },
+        body: jsonEncode({
+          "email": email,
+          "password": password
+        }),
+      ).timeout(timeoutDuration);
 
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      await saveToken(data["token"]);
-      return true;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        await saveToken(data["token"]);
+        return {
+          "success": true,
+          "message": "Login successful"
+        };
+      } else {
+        final error = jsonDecode(response.body);
+        return {
+          "success": false,
+          "message": error["message"] ?? "Invalid email or password"
+        };
+      }
+    } catch (e) {
+      return {
+        "success": false,
+        "message": "Connection error. Please check your internet connection."
+      };
     }
-    return false;
   }
 
   // Logout User
   static Future<void> logout(BuildContext context) async {
     try {
-      final HomeController homeController = Get.find<HomeController>();
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      String? token = prefs.getString("token");
-
+      final token = await getToken();
       if (token != null) {
         await http.post(
           Uri.parse("$baseUrl/logout"),
-          headers: {"Authorization": "Bearer $token"},
-        );
+          headers: await _getHeaders(),
+        ).timeout(timeoutDuration);
       }
-
-      // Clear local storage
-      await prefs.remove("token");
-
-      // Clear HomeController data
-      homeController.userName.value = "";
-      homeController.userEmail.value = "";
-      homeController.walletBalance.value = 0.00;
-      homeController.transactionHistory.clear();
-
-      // Redirect to Login Screen
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-        (route) => false, // Removes all previous routes
-      ); // This removes all previous screens and redirects
-    } catch (e) {
-      print("Logout Error: $e");
+    } finally {
+      await clearToken();
     }
   }
 
   // Fetch User Details
   // Save User Data to SharedPreferences
   static Future<void> saveUserData(Map<String, dynamic> userData) async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
     await prefs.setString("user_data", jsonEncode(userData));
   }
 
   // Get User Data from SharedPreferences
   static Future<Map<String, dynamic>?> getUserDataFromStorage() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? userDataString = prefs.getString("user_data");
-
+    final prefs = await SharedPreferences.getInstance();
+    final userDataString = prefs.getString("user_data");
+    
     if (userDataString != null) {
       return jsonDecode(userDataString);
     }
@@ -101,46 +126,32 @@ class ApiService {
 
   // Fetch User Details (Check Local Storage First)
   static Future<Map<String, dynamic>?> getUserDetails() async {
-    String? token = await getToken();
-    if (token == null) return null;
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/user"),
+        headers: await _getHeaders(),
+      ).timeout(timeoutDuration);
 
-    final response = await http.get(
-      Uri.parse("$baseUrl/user"),
-      headers: {"Authorization": "Bearer $token"},
-    );
-
-    if (response.statusCode == 200) {
-      final userData = jsonDecode(response.body);
-
-      // Update local storage with fresh data
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString("user_data", jsonEncode(userData));
-
-      return userData;
+      return await _handleResponse(response);
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Failed to fetch user details: ${e.toString()}');
     }
-    return null;
   }
 
   static Future<double?> getWalletBalance() async {
-    String? token = await getToken();
-    if (token == null) return null;
+    try {
+      final response = await http.get(
+        Uri.parse("$baseUrl/wallet/balance"),
+        headers: await _getHeaders(),
+      ).timeout(timeoutDuration);
 
-    final response = await http.get(
-      Uri.parse("$baseUrl/wallet"),
-      headers: {"Authorization": "Bearer $token"},
-    );
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-
-      // Ensure the balance is parsed correctly
-      if (data["balance"] is num) {
-        return (data["balance"] as num).toDouble();
-      } else if (data["balance"] is String) {
-        return double.tryParse(data["balance"]);
-      }
+      final data = await _handleResponse(response);
+      return double.tryParse(data['balance'].toString()) ?? 0.0;
+    } catch (e) {
+      if (e is ApiException) rethrow;
+      throw ApiException('Failed to fetch wallet balance: ${e.toString()}');
     }
-    return null;
   }
 
   static Future<bool> submitAddMoney(double amount) async {
@@ -164,7 +175,7 @@ class ApiService {
           data["balance"].toDouble();
 
       // ✅ Refresh transaction history
-      Get.find<HomeController>().fetchUserData();
+      Get.find<HomeController>().loadUserData();
 
       return true;
     } else {
@@ -174,25 +185,17 @@ class ApiService {
   }
 
   static Future<List<Map<String, dynamic>>> getTransactions() async {
-    String? token = await getToken();
-    if (token == null) return [];
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/user'),
-        headers: {
-          'Authorization': "Bearer $token",
-          'Content-Type': 'application/json',
-        },
-      );
+        Uri.parse("$baseUrl/transactions"),
+        headers: await _getHeaders(),
+      ).timeout(timeoutDuration);
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return List<Map<String, dynamic>>.from(data["transactions"]);
-      } else {
-        return [];
-      }
+      final data = await _handleResponse(response);
+      return List<Map<String, dynamic>>.from(data['transactions'] ?? []);
     } catch (e) {
-      return [];
+      if (e is ApiException) rethrow;
+      throw ApiException('Failed to fetch transactions: ${e.toString()}');
     }
   }
 
@@ -217,7 +220,7 @@ class ApiService {
     if (response.statusCode == 200) {
       try {
         final data = jsonDecode(response.body);
-        Get.find<HomeController>().fetchUserData();
+        Get.find<HomeController>().loadUserData();
         return {
           "success": true,
           "balance": data["balance"].toDouble(),
@@ -282,7 +285,7 @@ class ApiService {
             'balance': data['balance']?.toString() ?? '0.00',
           };
           
-          Get.find<HomeController>().fetchUserData();
+          Get.find<HomeController>().loadUserData();
           
           return {
             "success": true,
@@ -310,5 +313,36 @@ class ApiService {
         "message": "Connection error occurred"
       };
     }
+  }
+
+  static Future<Map<String, String>> _getHeaders() async {
+    final token = await getToken();
+    return {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      if (token != null) 'Authorization': 'Bearer $token',
+    };
+  }
+
+  static Future<dynamic> _handleResponse(http.Response response) async {
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return jsonDecode(response.body);
+    }
+
+    if (response.statusCode == 401) {
+      await clearToken();
+      Get.offAll(() => LoginScreen());
+      throw ApiException('Unauthorized access', statusCode: response.statusCode);
+    }
+
+    throw ApiException(
+      response.body.isNotEmpty ? jsonDecode(response.body)['message'] ?? 'Unknown error occurred' : 'Unknown error occurred',
+      statusCode: response.statusCode
+    );
+  }
+
+  static Future<void> clearToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove("token");
   }
 }

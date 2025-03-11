@@ -154,10 +154,10 @@ class ProfileScreen extends StatelessWidget {
               title: Text("Logout"),
               trailing: Icon(Icons.arrow_forward_ios, size: 16),
               onTap: () async {
-                bool confirmLogout =
-                    await _showLogoutConfirmationDialog(context);
+                bool confirmLogout = await _showLogoutConfirmationDialog(context);
                 if (confirmLogout) {
-                  await ApiService.logout(context); // Call the logout function
+                  final homeController = Get.find<HomeController>();
+                  await homeController.logout();
                 }
               },
             ),

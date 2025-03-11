@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wallet_app/dashboard/dashboard_screen.dart';
 import 'package:wallet_app/onboarding_screen.dart';
-import 'package:wallet_app/services/api_service.dart';
 import 'package:wallet_app/services/home_controller.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -12,65 +9,103 @@ class SplashScreen extends StatefulWidget {
   _SplashScreenState createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  
   @override
   void initState() {
     super.initState();
+    
+    // Setup animations
+    _animationController = AnimationController(
+      vsync: this,
+      duration: Duration(milliseconds: 1500),
+    );
+    
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _animationController,
+        curve: Curves.easeIn,
+      ),
+    );
+    
+    _animationController.forward();
+    
+    // Navigate after checking auth
     _checkAuthAndNavigate();
   }
 
+  @override
+  void dispose() {
+    _animationController.dispose();
+    super.dispose();
+  }
+
   Future<void> _checkAuthAndNavigate() async {
-    await Future.delayed(Duration(seconds: 2)); // Show splash for 2 seconds
-
-    String? token = await ApiService.getToken();
-    if (token != null) {
-      // User is authenticated, get user data
-      final HomeController homeController = Get.find<HomeController>();
-      var userData = await ApiService.getUserDetails();
+    try {
+      final homeController = Get.find<HomeController>();
       
-      if (userData != null) {
-        // Update HomeController with user data
-        homeController.userName.value = userData["name"];
-        homeController.userEmail.value = userData["email"];
-        homeController.walletBalance.value = 
-            double.tryParse(userData["balance"].toString()) ?? 0.00;
-        homeController.transactionHistory.assignAll(userData["transactions"] ?? []);
-
-        // Navigate to Dashboard
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => DashboardScreen()),
-        );
+      // Wait for minimum splash duration and auth check in parallel
+      await Future.wait([
+        Future.delayed(Duration(milliseconds: 1500)), // Minimum splash duration
+        homeController.initializeApp(),
+      ]);
+      
+      // Navigate based on auth status
+      if (homeController.isAuthenticated.value) {
+        Get.off(() => DashboardScreen());
       } else {
-        // Token invalid or expired
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-        await prefs.remove("token");
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => OnboardingScreen()),
-        );
+        Get.off(() => OnboardingScreen());
       }
-    } else {
-      // No token found, go to onboarding
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => OnboardingScreen()),
-      );
+    } catch (e) {
+      print('Error during splash screen: $e');
+      Get.off(() => OnboardingScreen());
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.blueAccent,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.account_balance_wallet, size: 100, color: Colors.white),
-            SizedBox(height: 20),
-            CircularProgressIndicator(color: Colors.white),
-          ],
+      backgroundColor: Colors.white,
+      body: FadeTransition(
+        opacity: _fadeAnimation,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.account_balance_wallet,
+                  size: 80,
+                  color: Colors.blueAccent,
+                ),
+              ),
+              SizedBox(height: 20),
+              Text(
+                'WalletPay',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blueAccent,
+                ),
+              ),
+              SizedBox(height: 30),
+              SizedBox(
+                width: 30,
+                height: 30,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.blueAccent),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,66 +1,100 @@
 import 'package:get/get.dart';
 import 'package:wallet_app/services/api_service.dart';
+import 'package:wallet_app/auth/login_screen.dart';
 
 class HomeController extends GetxController {
-  var userName = "Guest User".obs;
-  var userEmail = "guest@example.com".obs;
-  var walletBalance = 0.00.obs;
-  var transactionHistory = <dynamic>[].obs;
-  var profileImage = ''.obs;
-  var isLoading = false.obs;
+  // User data
+  final userName = ''.obs;
+  final userEmail = ''.obs;
+  final walletBalance = 0.00.obs;
+  final transactionHistory = <Map<String, dynamic>>[].obs;
+  final profileImage = ''.obs;
+  
+  // State flags
+  final isLoading = false.obs;
+  final isAuthenticated = false.obs;
 
-  @override
-  void onInit() {
-    super.onInit();
-    loadUserData();
-    fetchWalletBalance();
-    fetchTransactions();
+  Future<void> initializeApp() async {
+    try {
+      // Check if user is authenticated
+      final token = await ApiService.getToken();
+      isAuthenticated.value = token != null;
+      
+      if (isAuthenticated.value) {
+        await loadUserData();
+      }
+    } catch (e) {
+      print('Initialization error: $e');
+      isAuthenticated.value = false;
+    }
   }
 
   Future<void> loadUserData() async {
-    final userData = await ApiService.getUserDataFromStorage();
-    if (userData != null) {
-      // ✅ Load cached data first
-      userName.value = userData["name"];
-      userEmail.value = userData["email"];
-      walletBalance.value =
-          double.tryParse(userData["balance"].toString()) ?? 0.00;
-      transactionHistory.assignAll(userData["transactions"] ?? []);
-
-      // ✅ Then fetch fresh data from API
-      fetchUserData();
-    } else {
-      fetchUserData();
-    }
-  }
-
-  Future<void> fetchWalletBalance() async {
-    double? balance = await ApiService.getWalletBalance();
-    if (balance != null) {
-      walletBalance.value = balance;
-    }
-  }
-
-  void fetchTransactions() async {
-    isLoading(true);
     try {
-      var transactions = await ApiService.getTransactions();
-      transactionHistory.assignAll(transactions);
+      isLoading.value = true;
+      
+      // Load cached data first for instant UI update
+      final cachedData = await ApiService.getUserDataFromStorage();
+      if (cachedData != null) {
+        _updateUserData(cachedData);
+      }
+      
+      // Then fetch fresh data from API
+      final freshData = await ApiService.getUserDetails();
+      if (freshData != null) {
+        _updateUserData(freshData);
+        await ApiService.saveUserData(freshData); // Update cache
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
     } finally {
-      isLoading(false);
+      isLoading.value = false;
     }
   }
 
-  Future<void> fetchUserData() async {
-    final userData = await ApiService.getUserDetails();
-    if (userData != null) {
-      userName.value = userData["name"];
-      userEmail.value = userData["email"];
+  void _updateUserData(Map<String, dynamic> userData) {
+    userName.value = userData["name"] ?? '';
+    userEmail.value = userData["email"] ?? '';
+    walletBalance.value = double.tryParse(userData["balance"]?.toString() ?? "0") ?? 0.00;
+    
+    if (userData["transactions"] != null) {
+      final List<dynamic> transactions = userData["transactions"];
+      transactionHistory.assignAll(
+        transactions.map((t) => t as Map<String, dynamic>).toList()
+      );
+    }
+    
+    if (userData["profile_image"] != null) {
+      profileImage.value = userData["profile_image"];
+    }
+  }
 
-      walletBalance.value =
-          double.tryParse(userData["balance"].toString()) ?? 0.00;
+  Future<void> refreshData() async {
+    if (isAuthenticated.value) {
+      await loadUserData();
+    }
+  }
 
-      transactionHistory.assignAll(userData["transactions"] ?? []);
+  Future<void> logout() async {
+    try {
+      isLoading.value = true;
+      await ApiService.logout(Get.context!);
+      
+      // Reset controller state
+      userName.value = '';
+      userEmail.value = '';
+      walletBalance.value = 0.00;
+      transactionHistory.clear();
+      profileImage.value = '';
+      isAuthenticated.value = false;
+      
+      // Navigate to login screen
+      Get.offAll(() => LoginScreen());
+      
+    } catch (e) {
+      print('Logout error: $e');
+    } finally {
+      isLoading.value = false;
     }
   }
 }
