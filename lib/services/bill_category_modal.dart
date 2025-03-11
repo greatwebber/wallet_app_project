@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'package:wallet_app/services/api_service.dart';
+import 'package:wallet_app/services/home_controller.dart';
+import 'package:wallet_app/screens/transaction_details_screen.dart';
 
 class BillCategoryModal extends StatefulWidget {
   final String category;
@@ -13,6 +17,8 @@ class _BillCategoryModalState extends State<BillCategoryModal> {
   String? selectedPlan;
   TextEditingController numberController = TextEditingController();
   TextEditingController amountController = TextEditingController();
+  bool isLoading = false;
+  String? errorMessage;
 
   final Map<String, List<String>> billProviders = {
     "Airtime": ["MTN", "Airtel", "Glo", "9mobile"],
@@ -28,15 +34,107 @@ class _BillCategoryModalState extends State<BillCategoryModal> {
     "9mobile": ["1GB - ₦700", "2GB - ₦1300", "3GB - ₦1800"],
   };
 
+  Future<void> _processBillPayment() async {
+    setState(() {
+      isLoading = true;
+      errorMessage = null;
+    });
+
+    try {
+      final homeController = Get.find<HomeController>();
+      double amount = double.tryParse(amountController.text) ?? 0;
+      
+      if (widget.category == "Internet" && selectedPlan != null) {
+        amount = double.parse(selectedPlan!.split(" - ₦")[1]);
+      }
+
+      if (amount <= 0) {
+        setState(() {
+          errorMessage = "Please enter a valid amount";
+          isLoading = false;
+        });
+        return;
+      }
+
+      if (amount > homeController.walletBalance.value) {
+        setState(() {
+          errorMessage = "Insufficient balance";
+          isLoading = false;
+        });
+        return;
+      }
+
+      if (selectedProvider == null) {
+        setState(() {
+          errorMessage = "Please select a provider";
+          isLoading = false;
+        });
+        return;
+      }
+
+      if (numberController.text.isEmpty) {
+        setState(() {
+          errorMessage = widget.category == "Electricity" 
+              ? "Please enter meter number"
+              : "Please enter phone number";
+          isLoading = false;
+        });
+        return;
+      }
+
+      final result = await ApiService.processBillPayment(
+        category: widget.category,
+        provider: selectedProvider!,
+        number: numberController.text,
+        amount: amount,
+        plan: widget.category == "Internet" ? selectedPlan : null,
+      );
+
+      if (!mounted) return;
+
+      if (result["success"]) {
+        Navigator.pop(context);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TransactionDetailsScreen(
+              transactionData: result["transaction"],
+              category: widget.category,
+              provider: selectedProvider!,
+              number: numberController.text,
+              amount: amount,
+              plan: widget.category == "Internet" ? selectedPlan : null,
+            ),
+          ),
+        );
+      } else {
+        setState(() {
+          errorMessage = result["message"];
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        errorMessage = "An unexpected error occurred. Please try again.";
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     List<String> providers = billProviders[widget.category] ?? [];
 
     return DraggableScrollableSheet(
       expand: false,
-      initialChildSize: 0.6, // Start with 60% of the screen
-      minChildSize: 0.5, // Minimum height
-      maxChildSize: 0.9, // Maximum height
+      initialChildSize: 0.6,
+      minChildSize: 0.5,
+      maxChildSize: 0.9,
       builder: (context, scrollController) {
         return Container(
           padding: EdgeInsets.all(16),
@@ -66,96 +164,109 @@ class _BillCategoryModalState extends State<BillCategoryModal> {
                 ),
                 SizedBox(height: 15),
                 Text("Select Provider",
-                    style:
-                        TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 SizedBox(height: 10),
                 Wrap(
                   spacing: 10,
+                  runSpacing: 10,
                   children: providers.map((provider) {
                     return ChoiceChip(
-                      backgroundColor: Colors.blue[200],
                       label: Text(provider),
                       selected: selectedProvider == provider,
                       onSelected: (selected) {
                         setState(() {
-                          selectedProvider = provider;
+                          selectedProvider = selected ? provider : null;
                           selectedPlan = null;
                         });
                       },
                     );
                   }).toList(),
                 ),
-                SizedBox(height: 20),
-                if (widget.category == "Internet" && selectedProvider != null)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Select Data Plan",
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 10),
-                      Wrap(
-                        spacing: 10,
-                        children: dataPlans[selectedProvider]?.map((plan) {
-                              return ChoiceChip(
-                                label: Text(plan),
-                                selected: selectedPlan == plan,
-                                onSelected: (selected) {
-                                  setState(() {
-                                    selectedPlan = plan;
-                                  });
-                                },
-                              );
-                            }).toList() ??
-                            [],
-                      ),
-                    ],
+                if (widget.category == "Internet" && selectedProvider != null) ...[
+                  SizedBox(height: 20),
+                  Text("Select Data Plan",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 10),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: dataPlans[selectedProvider]?.map((plan) {
+                          return ChoiceChip(
+                            label: Text(plan),
+                            selected: selectedPlan == plan,
+                            onSelected: (selected) {
+                              setState(() {
+                                selectedPlan = selected ? plan : null;
+                                if (selected) {
+                                  amountController.text = plan.split(" - ₦")[1];
+                                }
+                              });
+                            },
+                          );
+                        }).toList() ??
+                        [],
                   ),
+                ],
                 SizedBox(height: 20),
                 Text(
-                  "Enter ${widget.category == 'Electricity' ? 'Meter Number' : 'Phone Number'}",
+                  widget.category == "Electricity" ? "Meter Number" : "Phone Number",
                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                 ),
+                SizedBox(height: 10),
                 TextField(
                   controller: numberController,
                   keyboardType: TextInputType.number,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
+                    prefixIcon: Icon(widget.category == "Electricity" 
+                        ? Icons.electric_meter
+                        : Icons.phone),
                   ),
                 ),
-                SizedBox(height: 15),
-                if (widget.category != "Internet")
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("Enter Amount",
-                          style: TextStyle(
-                              fontSize: 16, fontWeight: FontWeight.bold)),
-                      TextField(
-                        controller: amountController,
-                        keyboardType: TextInputType.number,
-                        decoration: InputDecoration(
-                          border: OutlineInputBorder(),
-                          prefixIcon: Icon(Icons.money),
-                        ),
-                      ),
-                    ],
+                if (widget.category != "Internet") ...[
+                  SizedBox(height: 15),
+                  Text("Enter Amount",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 10),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.money),
+                      prefixText: "₦",
+                    ),
                   ),
+                ],
+                if (errorMessage != null) ...[
+                  SizedBox(height: 10),
+                  Text(
+                    errorMessage!,
+                    style: TextStyle(color: Colors.red),
+                  ),
+                ],
                 SizedBox(height: 20),
                 Center(
                   child: ElevatedButton(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueAccent,
+                      padding: EdgeInsets.symmetric(horizontal: 40, vertical: 15),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
-                    onPressed: () {
-                      // Process payment logic
-                    },
-                    child: Text("Proceed to Pay",
-                        style: TextStyle(fontSize: 16, color: Colors.white)),
+                    onPressed: isLoading ? null : _processBillPayment,
+                    child: isLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text("Pay Now",
+                            style: TextStyle(fontSize: 16, color: Colors.white)),
                   ),
                 ),
               ],

@@ -238,4 +238,77 @@ class ApiService {
       }
     }
   }
+
+  static Future<Map<String, dynamic>> processBillPayment({
+    required String category,
+    required String provider,
+    required String number,
+    required double amount,
+    String? plan,
+  }) async {
+    String? token = await getToken();
+    if (token == null)
+      return {"success": false, "message": "Authentication failed"};
+
+    try {
+      final response = await http.post(
+        Uri.parse("$baseUrl/wallet/bill-payment"),
+        headers: {
+          "Authorization": "Bearer $token",
+          "Content-Type": "application/json",
+        },
+        body: jsonEncode({
+          "category": category,
+          "provider": provider,
+          "number": number,
+          "amount": amount,
+          if (plan != null) "plan": plan,
+        }),
+      );
+
+      print('Bill Payment Response: ${response.body}'); // Debug log
+
+      final data = jsonDecode(response.body);
+      
+      if (response.statusCode == 200) {
+        if (data['success'] == true) {
+          // Ensure transaction data has all required fields
+          final transactionData = {
+            'id': data['transaction']['id'] ?? '',
+            'amount': data['transaction']['amount'] ?? amount,
+            'type': data['transaction']['type'] ?? 'bill_payment',
+            'status': data['transaction']['status'] ?? 'completed',
+            'created_at': data['transaction']['created_at'] ?? DateTime.now().toIso8601String(),
+            'balance': data['balance']?.toString() ?? '0.00',
+          };
+          
+          Get.find<HomeController>().fetchUserData();
+          
+          return {
+            "success": true,
+            "message": data["message"] ?? "Payment successful",
+            "balance": data["balance"]?.toString() ?? '0.00',
+            "transaction": transactionData,
+          };
+        } else {
+          return {
+            "success": false,
+            "message": data["message"] ?? "Payment failed"
+          };
+        }
+      } else {
+        print('Bill Payment Error: ${response.statusCode} - ${response.body}');
+        return {
+          "success": false,
+          "message": data["message"] ?? "Server error occurred"
+        };
+      }
+    } catch (e) {
+      print('Bill Payment Exception: $e');
+      return {
+        "success": false,
+        "message": "Connection error occurred"
+      };
+    }
+  }
 }
