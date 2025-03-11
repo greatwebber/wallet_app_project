@@ -93,6 +93,10 @@ class _BillCategoryModalState extends State<BillCategoryModal> {
       if (!mounted) return;
 
       if (result["success"]) {
+        // Update wallet balance and transactions
+        homeController.fetchWalletBalance();
+        homeController.fetchTransactions();
+        
         Navigator.pop(context);
         Navigator.push(
           context,

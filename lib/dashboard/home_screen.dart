@@ -8,11 +8,13 @@ import 'package:wallet_app/services/api_service.dart';
 import 'package:pay_with_paystack/pay_with_paystack.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
+import 'package:wallet_app/widgets/transaction_list_item.dart';
 import 'package:wallet_app/services/home_controller.dart';
+import 'package:wallet_app/controllers/dashboard_controller.dart';
 
 class HomeScreen extends StatelessWidget {
   final HomeController homeController = Get.put(HomeController());
+  final DashboardController dashboardController = Get.put(DashboardController());
 
   void _showAddMoneyModal(BuildContext context) {
     TextEditingController amountController = TextEditingController();
@@ -469,58 +471,54 @@ class HomeScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    "Recent Transactions",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        "Recent Transactions",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          // Switch to Transactions tab
+                          Get.find<DashboardController>().changeTabIndex(1);
+                        },
+                        child: Text("See All"),
+                      ),
+                    ],
                   ),
                   SizedBox(height: 10),
                   Obx(() {
-                    return homeController.transactionHistory.isEmpty
-                        ? Center(
-                            child: Text(
-                              "No transactions found",
-                              style: TextStyle(color: Colors.grey),
-                            ),
-                          )
-                        : Column(
-                            children: homeController.transactionHistory
-                                .take(5)
-                                .map((transaction) {
-                              bool isCredit = transaction["type"] == "credit";
-                              String recipient =
-                                  transaction["recipient"] ?? "N/A";
+                    if (homeController.isLoading.value) {
+                      return Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
 
-                              // Generate description dynamically
-                              String description = isCredit
-                                  ? "Received from $recipient"
-                                  : "Sent to $recipient";
+                    if (homeController.transactionHistory.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20),
+                          child: Text(
+                            "No transactions found",
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                      );
+                    }
 
-                              return ListTile(
-                                leading: Icon(
-                                  isCredit
-                                      ? Icons.arrow_downward
-                                      : Icons.arrow_upward,
-                                  color: isCredit ? Colors.green : Colors.red,
-                                ),
-                                title: Text(
-                                  description, // Dynamic description
-                                  style: TextStyle(fontSize: 16),
-                                ),
-                                subtitle: Text(
-                                  transaction["created_at"],
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                                trailing: Text(
-                                  "₦${transaction["amount"]}",
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: isCredit ? Colors.green : Colors.red,
-                                  ),
-                                ),
-                              );
-                            }).toList(),
-                          );
+                    return Column(
+                      children: homeController.transactionHistory
+                          .take(5)
+                          .map((transaction) => TransactionListItem(
+                                transaction: transaction,
+                                isCompact: true,
+                              ))
+                          .toList(),
+                    );
                   }),
                 ],
               ),
