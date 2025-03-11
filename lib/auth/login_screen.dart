@@ -24,51 +24,71 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController passwordController = TextEditingController();
 
   Future<void> _login() async {
-    if (!_formKey.currentState!.validate()) return; // ✅ Check validation
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isLoading = true;
     });
 
-    bool success = await ApiService.login(
-      emailController.text.trim(),
-      passwordController.text,
-    );
+    try {
+      bool success = await ApiService.login(
+        emailController.text.trim(),
+        passwordController.text,
+      );
 
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (success) {
-      // ✅ Get the HomeController instance
-      final HomeController homeController = Get.find<HomeController>();
-
-      // ✅ Fetch latest user data from API
-      var userData = await ApiService.getUserDetails();
-      if (userData != null) {
-        SharedPreferences prefs = await SharedPreferences.getInstance();
-
-        // ✅ Update HomeController values
-        homeController.userName.value = userData["name"];
-        homeController.userEmail.value = userData["email"];
-        homeController.walletBalance.value =
-            double.tryParse(userData["balance"].toString()) ?? 0.00;
-        homeController.transactionHistory
-            .assignAll(userData["transactions"] ?? []);
-
-        // ✅ Save latest data in SharedPreferences
-        await prefs.setString("username", userData["name"]);
-        await prefs.setDouble("walletBalance",
-            double.tryParse(userData["balance"].toString()) ?? 0.00);
+      if (!success) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showError("Invalid email or password. Please try again.");
+        return;
       }
 
-      // ✅ Navigate to Dashboard after updating UI
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => DashboardScreen()),
-      );
-    } else {
-      _showError("Invalid email or password. Please try again.");
+      // Get the HomeController instance
+      final HomeController homeController = Get.find<HomeController>();
+
+      // Fetch user data and update UI in parallel
+      await Future.wait([
+        // Fetch and update user data
+        ApiService.getUserDetails().then((userData) {
+          if (userData != null) {
+            homeController.userName.value = userData["name"];
+            homeController.userEmail.value = userData["email"];
+            homeController.walletBalance.value =
+                double.tryParse(userData["balance"].toString()) ?? 0.00;
+            homeController.transactionHistory
+                .assignAll(userData["transactions"] ?? []);
+          }
+        }),
+
+        // Save data to SharedPreferences in parallel
+        ApiService.getUserDetails().then((userData) async {
+          if (userData != null) {
+            SharedPreferences prefs = await SharedPreferences.getInstance();
+            await prefs.setString("username", userData["name"]);
+            await prefs.setDouble("walletBalance",
+                double.tryParse(userData["balance"].toString()) ?? 0.00);
+            await ApiService.saveUserData(userData); // Save complete user data
+          }
+        }),
+      ]);
+
+      // Navigate to Dashboard
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => DashboardScreen(),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+        _showError("An error occurred. Please try again.");
+      }
     }
   }
 
