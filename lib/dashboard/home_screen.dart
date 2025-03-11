@@ -478,13 +478,7 @@ class HomeScreen extends StatelessWidget {
                         "Recent Transactions",
                         style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                       ),
-                      TextButton(
-                        onPressed: () {
-                          // Switch to Transactions tab
-                          Get.find<DashboardController>().changeTabIndex(1);
-                        },
-                        child: Text("See All"),
-                      ),
+                      
                     ],
                   ),
                   SizedBox(height: 10),
